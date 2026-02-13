@@ -1,12 +1,9 @@
 // ============================================
-// WAVR TUNE — Pitch Curve Visualizer
+// WAVR TUNE — Orbital Pitch Visualizer
 //
-// Draws a real-time pitch curve on canvas:
-// - Background note reference lines
-// - Glowing purple detected pitch line
-// - Dashed target pitch line
-// - Animated dot at current position
-// - Idle animation when not listening
+// Inspired by PolyTune's circular orb display
+// Draws concentric rings showing pitch accuracy
+// with a glowing center orb that reacts to voice
 // ============================================
 
 class PitchVisualizer {
@@ -19,445 +16,482 @@ class PitchVisualizer {
     this.ctx = this.canvas.getContext('2d');
     this.width = 0;
     this.height = 0;
+    this.centerX = 0;
+    this.centerY = 0;
+    this.radius = 0;
 
-    // Rolling history of pitch data
+    // Pitch data
     this.pitchHistory = [];
     this.targetHistory = [];
     this.maxHistory = 300;
 
-    // Note names for reference lines
-    this.noteStrings = [
-      'C', 'C#', 'D', 'D#', 'E', 'F',
-      'F#', 'G', 'G#', 'A', 'A#', 'B'
-    ];
+    // Current state
+    this.currentFreq = 0;
+    this.currentTarget = 0;
+    this.currentCents = 0;
+    this.currentClarity = 0;
+    this.energy = 0;
+    this.smoothedEnergy = 0;
 
-    // Visible frequency range (covers most vocals)
-    this.minFreq = 80;    // ~E2
-    this.maxFreq = 800;   // ~G5
+    // Orb animation
+    this.orbPhase = 0;
+    this.orbPulse = 0;
+    this.particles = [];
+    this.initParticles();
 
-    // Animation state
+    // Frequency range
+    this.noteStrings = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    this.minFreq = 80;
+    this.maxFreq = 800;
+
+    // Animation
     this.animationId = null;
     this.isRunning = false;
 
-    // Initial sizing
     this.resize();
-
-    // Re-size on window resize
     this.boundResize = () => this.resize();
     window.addEventListener('resize', this.boundResize);
   }
 
-  /**
-   * Handle canvas resizing with device pixel ratio
-   * for crisp rendering on retina displays
-   */
+  // ---- Setup ----
+
   resize() {
     const rect = this.canvas.parentElement.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
+    const size = Math.min(rect.width, rect.height);
 
-    this.canvas.width = rect.width * dpr;
-    this.canvas.height = rect.height * dpr;
-    this.canvas.style.width = rect.width + 'px';
-    this.canvas.style.height = rect.height + 'px';
+    this.canvas.width = size * dpr;
+    this.canvas.height = size * dpr;
+    this.canvas.style.width = size + 'px';
+    this.canvas.style.height = size + 'px';
 
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
 
-    this.width = rect.width;
-    this.height = rect.height;
+    this.width = size;
+    this.height = size;
+    this.centerX = size / 2;
+    this.centerY = size / 2;
+    this.radius = size / 2 - 10;
   }
 
-  /**
-   * Convert a frequency to a Y position on the canvas
-   * Uses logarithmic scale (matches how we hear pitch)
-   */
-  freqToY(freq) {
-    if (freq <= 0) return this.height / 2;
-
-    const clampedFreq = Math.max(this.minFreq, Math.min(this.maxFreq, freq));
-    const logMin = Math.log2(this.minFreq);
-    const logMax = Math.log2(this.maxFreq);
-    const logFreq = Math.log2(clampedFreq);
-
-    const normalized = (logFreq - logMin) / (logMax - logMin);
-
-    // Invert Y (canvas 0 is top) and add padding
-    return this.height - (normalized * this.height * 0.8 + this.height * 0.1);
+  initParticles() {
+    this.particles = [];
+    for (let i = 0; i < 40; i++) {
+      this.particles.push({
+        angle: Math.random() * Math.PI * 2,
+        radius: 0.3 + Math.random() * 0.6,
+        speed: 0.002 + Math.random() * 0.008,
+        size: 0.5 + Math.random() * 1.5,
+        opacity: 0.1 + Math.random() * 0.4,
+        phase: Math.random() * Math.PI * 2
+      });
+    }
   }
 
-  /**
-   * Get frequency for a specific note and octave
-   */
-  noteFreq(noteName, octave) {
-    const noteIndex = this.noteStrings.indexOf(noteName);
-    if (noteIndex === -1) return 0;
+  // ---- Data Input ----
 
-    const midiNote = (octave + 1) * 12 + noteIndex;
-    return 440 * Math.pow(2, (midiNote - 69) / 12);
-  }
-
-  /**
-   * Push new pitch data into the rolling history
-   */
   pushData(detectedFreq, targetFreq) {
     this.pitchHistory.push(detectedFreq);
     this.targetHistory.push(targetFreq);
 
-    // Keep buffer bounded
     if (this.pitchHistory.length > this.maxHistory) {
       this.pitchHistory.shift();
       this.targetHistory.shift();
     }
-  }
 
-  /**
-   * Draw horizontal reference lines for musical notes
-   */
-  drawNoteLines(ctx, w, h) {
-    const majorNotes = ['C', 'E', 'G'];
-    const allDiatonic = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+    this.currentFreq = detectedFreq;
+    this.currentTarget = targetFreq;
 
-    for (let octave = 2; octave <= 5; octave++) {
-      for (const note of allDiatonic) {
-        const freq = this.noteFreq(note, octave);
-        if (freq < this.minFreq || freq > this.maxFreq) continue;
-
-        const y = this.freqToY(freq);
-
-        // Draw the line
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
-
-        if (note === 'C') {
-          // C notes are brighter
-          ctx.strokeStyle = 'rgba(139, 92, 246, 0.12)';
-          ctx.lineWidth = 1;
-        } else {
-          ctx.strokeStyle = 'rgba(139, 92, 246, 0.04)';
-          ctx.lineWidth = 0.5;
-        }
-        ctx.stroke();
-
-        // Label major notes
-        if (majorNotes.includes(note)) {
-          ctx.fillStyle = 'rgba(139, 92, 246, 0.2)';
-          ctx.font = '500 9px Inter, sans-serif';
-          ctx.textAlign = 'left';
-          ctx.fillText(note + octave, 6, y - 3);
-        }
-      }
+    // Calculate cents deviation
+    if (detectedFreq > 0 && targetFreq > 0) {
+      this.currentCents = 1200 * Math.log2(detectedFreq / targetFreq);
+      this.energy = 1;
+    } else {
+      this.currentCents = 0;
+      this.energy = 0;
     }
   }
 
-  /**
-   * Draw a pitch line (either detected or target)
-   * 
-   * glow: if true, draws with purple glow effect
-   * dashed: if true, draws dashed line (for target)
-   */
-  drawPitchLine(ctx, w, h, history, options = {}) {
-    const {
-      color = 'rgba(139, 92, 246, 0.2)',
-      lineWidth = 2,
-      glow = false,
-      dashed = false
-    } = options;
+  setClarity(clarity) {
+    this.currentClarity = clarity;
+  }
 
-    if (history.length < 2) return;
+  // ---- Drawing ----
 
-    const step = w / this.maxHistory;
-    const startX = w - (history.length * step);
+  draw() {
+    const ctx = this.ctx;
+    const cx = this.centerX;
+    const cy = this.centerY;
+    const r = this.radius;
+    const time = Date.now() / 1000;
 
-    // Build the path
+    ctx.clearRect(0, 0, this.width, this.height);
+
+    // Smooth energy for animations
+    this.smoothedEnergy += (this.energy - this.smoothedEnergy) * 0.1;
+    this.energy *= 0.95;
+    this.orbPhase += 0.02;
+
+    // ---- Background ----
+    this.drawBackground(ctx, cx, cy, r);
+
+    // ---- Outer rings ----
+    this.drawOuterRings(ctx, cx, cy, r, time);
+
+    // ---- Pitch accuracy ring ----
+    this.drawAccuracyRing(ctx, cx, cy, r, time);
+
+    // ---- Floating particles ----
+    this.drawParticles(ctx, cx, cy, r, time);
+
+    // ---- Center orb ----
+    this.drawCenterOrb(ctx, cx, cy, r, time);
+
+    // ---- Pitch history trail ----
+    this.drawPitchTrail(ctx, cx, cy, r);
+
+    // ---- Idle state ----
+    if (this.smoothedEnergy < 0.05 && this.pitchHistory.length < 3) {
+      this.drawIdleState(ctx, cx, cy, r, time);
+    }
+  }
+
+  drawBackground(ctx, cx, cy, r) {
+    // Dark circular gradient
+    const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    bgGrad.addColorStop(0, '#151520');
+    bgGrad.addColorStop(0.6, '#111118');
+    bgGrad.addColorStop(1, '#0d0d14');
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = bgGrad;
+    ctx.fill();
+
+    // Subtle border
+    ctx.beginPath();
+    ctx.arc(cx, cy, r - 0.5, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  drawOuterRings(ctx, cx, cy, r, time) {
+    // Concentric reference rings
+    const ringRadii = [0.9, 0.72, 0.55, 0.38];
+
+    ringRadii.forEach((ratio, i) => {
+      const ringR = r * ratio;
+      const alpha = 0.03 + (this.smoothedEnergy * 0.02);
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(168, 85, 247, ${alpha})`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    });
+
+    // Rotating tick marks on outer ring
+    const tickCount = 24;
+    const outerR = r * 0.92;
+    const innerR = r * 0.87;
+
+    for (let i = 0; i < tickCount; i++) {
+      const angle = (i / tickCount) * Math.PI * 2 - Math.PI / 2;
+      const isMajor = i % 2 === 0;
+
+      const startR = isMajor ? innerR - 2 : innerR;
+      const x1 = cx + Math.cos(angle) * startR;
+      const y1 = cy + Math.sin(angle) * startR;
+      const x2 = cx + Math.cos(angle) * outerR;
+      const y2 = cy + Math.sin(angle) * outerR;
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = isMajor
+        ? 'rgba(168, 85, 247, 0.12)'
+        : 'rgba(255, 255, 255, 0.03)';
+      ctx.lineWidth = isMajor ? 1 : 0.5;
+      ctx.stroke();
+    }
+
+    // Note labels around outer ring
+    const noteLabels = ['C', '', 'D', '', 'E', 'F', '', 'G', '', 'A', '', 'B'];
+    const labelR = r * 0.82;
+
+    noteLabels.forEach((label, i) => {
+      if (!label) return;
+      const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+      const x = cx + Math.cos(angle) * labelR;
+      const y = cy + Math.sin(angle) * labelR;
+
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.15)';
+      ctx.font = '500 8px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, x, y);
+    });
+  }
+
+  drawAccuracyRing(ctx, cx, cy, r, time) {
+    if (this.smoothedEnergy < 0.05) return;
+
+    // The accuracy ring shows how close to target pitch
+    // Full ring = perfect pitch, partial = off pitch
+    const accuracy = Math.max(0, 1 - Math.abs(this.currentCents) / 50);
+    const ringR = r * 0.65;
+    const arcLength = accuracy * Math.PI * 2;
+
+    // Glow ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR, -Math.PI / 2, -Math.PI / 2 + arcLength);
+    ctx.strokeStyle = `rgba(168, 85, 247, ${0.15 + accuracy * 0.35})`;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+
+    ctx.shadowColor = 'rgba(168, 85, 247, 0.4)';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Bright core of ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR, -Math.PI / 2, -Math.PI / 2 + arcLength);
+    ctx.strokeStyle = `rgba(216, 180, 254, ${0.2 + accuracy * 0.5})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Dot at end of arc
+    if (arcLength > 0.1) {
+      const dotAngle = -Math.PI / 2 + arcLength;
+      const dotX = cx + Math.cos(dotAngle) * ringR;
+      const dotY = cy + Math.sin(dotAngle) * ringR;
+
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(216, 180, 254, ${0.5 + accuracy * 0.5})`;
+      ctx.shadowColor = 'rgba(168, 85, 247, 0.6)';
+      ctx.shadowBlur = 6;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  drawParticles(ctx, cx, cy, r, time) {
+    const particleEnergy = this.smoothedEnergy;
+
+    this.particles.forEach(p => {
+      p.angle += p.speed * (1 + particleEnergy * 2);
+      p.phase += 0.01;
+
+      const wobble = Math.sin(p.phase) * 0.05;
+      const pRadius = r * (p.radius + wobble) * (0.3 + particleEnergy * 0.3);
+
+      const x = cx + Math.cos(p.angle) * pRadius;
+      const y = cy + Math.sin(p.angle) * pRadius;
+
+      const alpha = p.opacity * (0.3 + particleEnergy * 0.7);
+
+      ctx.beginPath();
+      ctx.arc(x, y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(168, 85, 247, ${alpha})`;
+      ctx.fill();
+    });
+  }
+
+  drawCenterOrb(ctx, cx, cy, r, time) {
+    const orbR = r * 0.22;
+    const pulse = Math.sin(this.orbPhase) * 0.08 * this.smoothedEnergy;
+    const currentR = orbR * (1 + pulse);
+
+    // Outer glow
+    const glowR = currentR * 2.5;
+    const glowGrad = ctx.createRadialGradient(cx, cy, currentR * 0.5, cx, cy, glowR);
+    glowGrad.addColorStop(0, `rgba(168, 85, 247, ${0.08 + this.smoothedEnergy * 0.15})`);
+    glowGrad.addColorStop(0.5, `rgba(88, 28, 135, ${0.03 + this.smoothedEnergy * 0.05})`);
+    glowGrad.addColorStop(1, 'rgba(88, 28, 135, 0)');
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
+
+    // Main orb body
+    const orbGrad = ctx.createRadialGradient(
+      cx - currentR * 0.2, cy - currentR * 0.3, 0,
+      cx, cy, currentR
+    );
+
+    if (this.smoothedEnergy > 0.1) {
+      // Active — purple orb
+      const accuracy = Math.max(0, 1 - Math.abs(this.currentCents) / 50);
+      const greenMix = accuracy * this.smoothedEnergy;
+
+      orbGrad.addColorStop(0, `rgba(${180 - greenMix * 40}, ${100 + greenMix * 80}, ${247 - greenMix * 50}, 0.9)`);
+      orbGrad.addColorStop(0.5, `rgba(${120 - greenMix * 30}, ${60 + greenMix * 50}, ${200 - greenMix * 40}, 0.7)`);
+      orbGrad.addColorStop(1, `rgba(${60 - greenMix * 20}, ${20 + greenMix * 30}, ${130 - greenMix * 30}, 0.5)`);
+    } else {
+      // Idle — dark subtle orb
+      orbGrad.addColorStop(0, 'rgba(60, 50, 80, 0.5)');
+      orbGrad.addColorStop(0.5, 'rgba(40, 30, 60, 0.4)');
+      orbGrad.addColorStop(1, 'rgba(25, 18, 40, 0.3)');
+    }
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, currentR, 0, Math.PI * 2);
+    ctx.fillStyle = orbGrad;
+    ctx.fill();
+
+    // Orb border ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, currentR, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(168, 85, 247, ${0.1 + this.smoothedEnergy * 0.25})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Highlight / gloss on orb
+    const shineGrad = ctx.createRadialGradient(
+      cx - currentR * 0.25, cy - currentR * 0.35, 0,
+      cx, cy, currentR
+    );
+    shineGrad.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
+    shineGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.02)');
+    shineGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, currentR, 0, Math.PI * 2);
+    ctx.fillStyle = shineGrad;
+    ctx.fill();
+
+    // Inner bright core
+    const coreR = currentR * 0.25;
+    const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+    coreGrad.addColorStop(0, `rgba(220, 200, 255, ${0.1 + this.smoothedEnergy * 0.3})`);
+    coreGrad.addColorStop(1, 'rgba(168, 85, 247, 0)');
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
+    ctx.fillStyle = coreGrad;
+    ctx.fill();
+  }
+
+  drawPitchTrail(ctx, cx, cy, r) {
+    // Draw recent pitch as a trail around the orb
+    const trailLength = Math.min(60, this.pitchHistory.length);
+    if (trailLength < 2) return;
+
+    const trailR = r * 0.48;
+    const startIdx = this.pitchHistory.length - trailLength;
+
     ctx.beginPath();
     let started = false;
-    let lastValidY = 0;
 
-    for (let i = 0; i < history.length; i++) {
-      const freq = history[i];
-      const x = startX + i * step;
-
+    for (let i = 0; i < trailLength; i++) {
+      const freq = this.pitchHistory[startIdx + i];
       if (freq <= 0) {
-        // Gap in detection — break the line
         started = false;
         continue;
       }
 
-      const y = this.freqToY(freq);
-      lastValidY = y;
+      // Map frequency to angle
+      const noteNum = 12 * Math.log2(freq / 440);
+      const notePos = ((noteNum % 12) + 12) % 12;
+      const angle = (notePos / 12) * Math.PI * 2 - Math.PI / 2;
+
+      // Slight spiral inward for older points
+      const ageRatio = i / trailLength;
+      const pointR = trailR * (0.85 + ageRatio * 0.15);
+
+      const x = cx + Math.cos(angle) * pointR;
+      const y = cy + Math.sin(angle) * pointR;
 
       if (!started) {
         ctx.moveTo(x, y);
         started = true;
       } else {
-        // Smooth curve instead of sharp lines
-        const prevFreq = history[i - 1];
-        if (prevFreq > 0) {
-          const prevX = startX + (i - 1) * step;
-          const prevY = this.freqToY(prevFreq);
-          const cpX = (prevX + x) / 2;
-          ctx.quadraticCurveTo(cpX, prevY, x, y);
-        } else {
-          ctx.moveTo(x, y);
-        }
+        ctx.lineTo(x, y);
       }
     }
 
-    // Set line style
-    if (dashed) {
-      ctx.setLineDash([4, 4]);
-    }
-
-    if (glow) {
-      // Layer 1: Wide soft glow
-      ctx.shadowColor = 'rgba(139, 92, 246, 0.5)';
-      ctx.shadowBlur = 16;
-      ctx.strokeStyle = 'rgba(168, 130, 255, 0.6)';
-      ctx.lineWidth = lineWidth + 1;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.stroke();
-
-      // Layer 2: Bright core
-      ctx.shadowColor = 'rgba(139, 92, 246, 0.8)';
-      ctx.shadowBlur = 6;
-      ctx.strokeStyle = 'rgba(216, 180, 254, 0.9)';
-      ctx.lineWidth = lineWidth * 0.6;
-      ctx.stroke();
-
-      // Reset shadow
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = 'transparent';
-    } else {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineWidth;
+    if (started) {
+      ctx.strokeStyle = 'rgba(168, 85, 247, 0.15)';
+      ctx.lineWidth = 1.5;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
       ctx.stroke();
     }
 
-    // Reset dash
-    ctx.setLineDash([]);
-  }
+    // Dot at current position
+    if (this.pitchHistory.length > 0) {
+      const lastFreq = this.pitchHistory[this.pitchHistory.length - 1];
+      if (lastFreq > 0) {
+        const noteNum = 12 * Math.log2(lastFreq / 440);
+        const notePos = ((noteNum % 12) + 12) % 12;
+        const angle = (notePos / 12) * Math.PI * 2 - Math.PI / 2;
 
-  /**
-   * Draw a glowing dot at the current pitch position
-   */
-  drawCurrentDot(ctx, w, h) {
-    if (this.pitchHistory.length === 0) return;
+        const dotX = cx + Math.cos(angle) * trailR;
+        const dotY = cy + Math.sin(angle) * trailR;
 
-    const lastFreq = this.pitchHistory[this.pitchHistory.length - 1];
-    if (lastFreq <= 0) return;
+        // Glow
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 6, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(168, 85, 247, 0.2)';
+        ctx.fill();
 
-    const x = w - 10;
-    const y = this.freqToY(lastFreq);
-
-    // Outer glow ring
-    const glowGrad = ctx.createRadialGradient(x, y, 0, x, y, 25);
-    glowGrad.addColorStop(0, 'rgba(139, 92, 246, 0.4)');
-    glowGrad.addColorStop(0.4, 'rgba(139, 92, 246, 0.15)');
-    glowGrad.addColorStop(1, 'rgba(139, 92, 246, 0)');
-
-    ctx.beginPath();
-    ctx.arc(x, y, 25, 0, Math.PI * 2);
-    ctx.fillStyle = glowGrad;
-    ctx.fill();
-
-    // Pulse animation ring
-    const pulseSize = 8 + Math.sin(Date.now() / 200) * 3;
-    ctx.beginPath();
-    ctx.arc(x, y, pulseSize, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Main dot
-    ctx.beginPath();
-    ctx.arc(x, y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#c084fc';
-    ctx.shadowColor = 'rgba(139, 92, 246, 0.8)';
-    ctx.shadowBlur = 12;
-    ctx.fill();
-
-    // Bright center point
-    ctx.beginPath();
-    ctx.arc(x, y, 2, 0, Math.PI * 2);
-    ctx.fillStyle = '#f5f0ff';
-    ctx.shadowBlur = 6;
-    ctx.fill();
-
-    // Reset shadow
-    ctx.shadowBlur = 0;
-    ctx.shadowColor = 'transparent';
-  }
-
-  /**
-   * Draw the target note indicator
-   * Shows which note the corrector is snapping to
-   */
-  drawTargetIndicator(ctx, w, h) {
-    if (this.targetHistory.length === 0) return;
-
-    const lastTarget = this.targetHistory[this.targetHistory.length - 1];
-    if (lastTarget <= 0) return;
-
-    const y = this.freqToY(lastTarget);
-
-    // Horizontal target line
-    ctx.beginPath();
-    ctx.moveTo(w - 60, y);
-    ctx.lineTo(w, y);
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.25)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([2, 3]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Small diamond marker
-    ctx.beginPath();
-    ctx.moveTo(w - 4, y - 4);
-    ctx.lineTo(w, y);
-    ctx.lineTo(w - 4, y + 4);
-    ctx.lineTo(w - 8, y);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.3)';
-    ctx.fill();
-  }
-
-  /**
-   * Idle animation when not actively processing
-   * Gentle flowing wave
-   */
-  drawIdleAnimation(ctx, w, h) {
-    const time = Date.now() / 1000;
-
-    // Flowing wave 1
-    ctx.beginPath();
-    for (let x = 0; x < w; x++) {
-      const y = h / 2 +
-        Math.sin(x * 0.015 + time * 1.2) * 20 +
-        Math.sin(x * 0.008 + time * 0.7) * 15 +
-        Math.sin(x * 0.003 + time * 0.4) * 30;
-
-      if (x === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.06)';
-    ctx.lineWidth = 1.5;
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-
-    // Flowing wave 2 (offset)
-    ctx.beginPath();
-    for (let x = 0; x < w; x++) {
-      const y = h / 2 +
-        Math.sin(x * 0.012 + time * 0.9 + 2) * 18 +
-        Math.sin(x * 0.006 + time * 0.5 + 1) * 22;
-
-      if (x === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.04)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Center message
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.15)';
-    ctx.font = '500 12px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Start listening or load audio to see pitch curve', w / 2, h / 2 + 55);
-    ctx.textAlign = 'left';
-
-    // WAVR Tune watermark
-    ctx.fillStyle = 'rgba(139, 92, 246, 0.06)';
-    ctx.font = '800 28px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('WAVR TUNE', w / 2, h / 2 - 10);
-    ctx.textAlign = 'left';
-  }
-
-  /**
-   * Main draw loop — called every animation frame
-   */
-  draw() {
-    const ctx = this.ctx;
-    const w = this.width;
-    const h = this.height;
-
-    if (w === 0 || h === 0) return;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, w, h);
-
-    // Dark gradient background
-    const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
-    bgGrad.addColorStop(0, 'rgba(10, 6, 18, 0.95)');
-    bgGrad.addColorStop(0.5, 'rgba(13, 8, 22, 0.95)');
-    bgGrad.addColorStop(1, 'rgba(17, 11, 30, 0.95)');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, w, h);
-
-    // Subtle vignette at edges
-    const vignetteGrad = ctx.createRadialGradient(
-      w / 2, h / 2, Math.min(w, h) * 0.3,
-      w / 2, h / 2, Math.max(w, h) * 0.7
-    );
-    vignetteGrad.addColorStop(0, 'transparent');
-    vignetteGrad.addColorStop(1, 'rgba(0, 0, 0, 0.3)');
-    ctx.fillStyle = vignetteGrad;
-    ctx.fillRect(0, 0, w, h);
-
-    // Note reference lines
-    this.drawNoteLines(ctx, w, h);
-
-    // Check if we have pitch data
-    const hasData = this.pitchHistory.length > 2 &&
-      this.pitchHistory.some(f => f > 0);
-
-    if (hasData) {
-      // Target pitch (dashed, subtle)
-      this.drawPitchLine(ctx, w, h, this.targetHistory, {
-        color: 'rgba(139, 92, 246, 0.12)',
-        lineWidth: 2,
-        dashed: true
-      });
-
-      // Detected pitch (glowing main line)
-      this.drawPitchLine(ctx, w, h, this.pitchHistory, {
-        lineWidth: 2.5,
-        glow: true
-      });
-
-      // Target indicator
-      this.drawTargetIndicator(ctx, w, h);
-
-      // Current position dot
-      this.drawCurrentDot(ctx, w, h);
-    } else {
-      // Idle state animation
-      this.drawIdleAnimation(ctx, w, h);
+        // Dot
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(216, 180, 254, 0.8)';
+        ctx.shadowColor = 'rgba(168, 85, 247, 0.6)';
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
     }
   }
 
-  /**
-   * Start the animation loop
-   */
+  drawIdleState(ctx, cx, cy, r, time) {
+    // Gentle breathing animation when idle
+    const breathe = Math.sin(time * 0.8) * 0.5 + 0.5;
+
+    // Soft ring pulse
+    const pulseR = r * (0.45 + breathe * 0.05);
+    ctx.beginPath();
+    ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(168, 85, 247, ${0.03 + breathe * 0.03})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Scanning line
+    const scanAngle = time * 0.5;
+    const scanR = r * 0.65;
+    const scanX = cx + Math.cos(scanAngle) * scanR;
+    const scanY = cy + Math.sin(scanAngle) * scanR;
+
+    const scanGrad = ctx.createRadialGradient(scanX, scanY, 0, scanX, scanY, 15);
+    scanGrad.addColorStop(0, 'rgba(168, 85, 247, 0.06)');
+    scanGrad.addColorStop(1, 'rgba(168, 85, 247, 0)');
+
+    ctx.beginPath();
+    ctx.arc(scanX, scanY, 15, 0, Math.PI * 2);
+    ctx.fillStyle = scanGrad;
+    ctx.fill();
+  }
+
+  // ---- Animation Control ----
+
   startAnimation() {
     this.isRunning = true;
-
     const animate = () => {
       if (!this.isRunning) return;
       this.draw();
       this.animationId = requestAnimationFrame(animate);
     };
-
     animate();
   }
 
-  /**
-   * Stop the animation loop
-   */
   stopAnimation() {
     this.isRunning = false;
     if (this.animationId) {
@@ -466,22 +500,19 @@ class PitchVisualizer {
     }
   }
 
-  /**
-   * Clear all pitch history
-   */
   clear() {
     this.pitchHistory = [];
     this.targetHistory = [];
+    this.currentFreq = 0;
+    this.currentTarget = 0;
+    this.currentCents = 0;
+    this.energy = 0;
   }
 
-  /**
-   * Clean up when destroying the visualizer
-   */
   destroy() {
     this.stopAnimation();
     window.removeEventListener('resize', this.boundResize);
   }
 }
 
-// Make available globally
 window.PitchVisualizer = PitchVisualizer;
