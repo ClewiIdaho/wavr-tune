@@ -1,148 +1,171 @@
 // ============================================
-// WAVR TUNE — Main App Controller (Redesigned)
+// WAVR TUNE — Main App Controller (FIXED)
 //
-// Updated to work with the new layout:
-// - Metallic 3D knobs
-// - Orbital pitch orb
-// - Piano keyboard
-// - Preset chips + top bar navigation
+// All interactive elements wired up:
+// - 3D metallic knobs (drag to adjust)
+// - Piano keyboard (click to toggle)
+// - Preset chips (click to apply)
+// - Preset navigation arrows
+// - Bypass toggle
+// - Start/Stop listening
+// - Load audio file
+// - Cents indicator bar
 // ============================================
 
 class WavrTuneApp {
   constructor() {
+    // Audio
     this.audioContext = null;
-    this.analyserNode = null;
     this.sourceNode = null;
     this.processorNode = null;
     this.mediaStream = null;
     this.fileSource = null;
 
+    // State
     this.isListening = false;
     this.isBypassed = false;
     this.isPlayingFile = false;
 
+    // DSP
     this.pitchDetector = null;
     this.pitchCorrector = null;
     this.visualizer = null;
 
+    // Knobs
     this.knobs = {};
-    this.analyserBufferSize = 2048;
 
-    // Preset navigation
+    // Presets
     this.presetNames = ['natural', 'soft', 'modern', 'hardtune', 'tpain'];
     this.presetLabels = ['Natural', 'Soft Snap', 'Modern', 'Hard Tune', 'T-Pain'];
-    this.currentPresetIndex = 2; // Modern
+    this.currentPresetIndex = 2;
 
+    // Boot
     this.init();
   }
 
+  // ============================================
+  // INITIALIZATION
+  // ============================================
+
   init() {
-    this.setupSVGGradients();
-    this.setupKnobs();
-    this.setupKeyboard();
-    this.setupSelectors();
-    this.setupPresets();
-    this.setupPresetNav();
-    this.setupButtons();
+    this.injectSVGGradient();
+    this.initKnobs();
+    this.initKeyboard();
+    this.initSelectors();
+    this.initPresetChips();
+    this.initPresetNav();
+    this.initButtons();
+    this.initVisualizer();
 
-    this.visualizer = new PitchVisualizer('pitchCanvas');
-    this.visualizer.startAnimation();
-
-    console.log('%c🎤 WAVR Tune initialized', 'color: #c084fc; font-weight: bold; font-size: 14px;');
+    console.log('%c🎤 WAVR Tune ready', 'color:#c084fc;font-weight:bold;font-size:14px;');
   }
 
-  // ============================================
-  // SVG GRADIENT
-  // ============================================
-
-  setupSVGGradients() {
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(svgNS, 'svg');
+  // ---- SVG Gradient for knob rings ----
+  injectSVGGradient() {
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
     svg.setAttribute('width', '0');
     svg.setAttribute('height', '0');
     svg.style.position = 'absolute';
     svg.style.pointerEvents = 'none';
 
-    const defs = document.createElementNS(svgNS, 'defs');
-    const gradient = document.createElementNS(svgNS, 'linearGradient');
-    gradient.setAttribute('id', 'knobGradient');
-    gradient.setAttribute('x1', '0%');
-    gradient.setAttribute('y1', '0%');
-    gradient.setAttribute('x2', '100%');
-    gradient.setAttribute('y2', '100%');
+    var defs = document.createElementNS(ns, 'defs');
+    var grad = document.createElementNS(ns, 'linearGradient');
+    grad.setAttribute('id', 'knobGradient');
+    grad.setAttribute('x1', '0%');
+    grad.setAttribute('y1', '0%');
+    grad.setAttribute('x2', '100%');
+    grad.setAttribute('y2', '100%');
 
-    const stops = [
+    var colors = [
       { offset: '0%', color: '#c084fc' },
       { offset: '50%', color: '#a855f7' },
       { offset: '100%', color: '#7c3aed' }
     ];
 
-    stops.forEach(s => {
-      const stop = document.createElementNS(svgNS, 'stop');
-      stop.setAttribute('offset', s.offset);
-      stop.setAttribute('stop-color', s.color);
-      gradient.appendChild(stop);
+    colors.forEach(function(c) {
+      var stop = document.createElementNS(ns, 'stop');
+      stop.setAttribute('offset', c.offset);
+      stop.setAttribute('stop-color', c.color);
+      grad.appendChild(stop);
     });
 
-    defs.appendChild(gradient);
+    defs.appendChild(grad);
     svg.appendChild(defs);
     document.body.appendChild(svg);
   }
 
   // ============================================
-  // KNOBS — Updated for new 3D metallic knobs
+  // KNOBS
   // ============================================
 
-  setupKnobs() {
-    const configs = {
-      correctionKnob: {
-        valueEl: 'correctionValue',
-        format: (v) => Math.round(v) + '%',
-        param: 'correction'
+  initKnobs() {
+    var self = this;
+
+    var configs = [
+      {
+        id: 'correctionKnob',
+        valueId: 'correctionValue',
+        param: 'correction',
+        format: function(v) { return Math.round(v) + '%'; }
       },
-      speedKnob: {
-        valueEl: 'speedValue',
-        format: (v) => Math.round(v * 0.5) + 'ms',
-        param: 'speed'
+      {
+        id: 'speedKnob',
+        valueId: 'speedValue',
+        param: 'speed',
+        format: function(v) { return Math.round(v * 0.5) + 'ms'; }
       },
-      humanizeKnob: {
-        valueEl: 'humanizeValue',
-        format: (v) => Math.round(v).toString(),
-        param: 'humanize'
+      {
+        id: 'humanizeKnob',
+        valueId: 'humanizeValue',
+        param: 'humanize',
+        format: function(v) { return Math.round(v).toString(); }
       },
-      formantKnob: {
-        valueEl: 'formantValue',
-        format: (v) => {
-          const st = Math.round((v - 50) * 0.24);
+      {
+        id: 'formantKnob',
+        valueId: 'formantValue',
+        param: 'formant',
+        format: function(v) {
+          var st = Math.round((v - 50) * 0.24);
           return (st >= 0 ? '+' : '') + st;
-        },
-        param: 'formant'
+        }
       },
-      mixKnob: {
-        valueEl: 'mixValue',
-        format: (v) => Math.round(v).toString(),
-        param: 'mix'
+      {
+        id: 'mixKnob',
+        valueId: 'mixValue',
+        param: 'mix',
+        format: function(v) { return Math.round(v).toString(); }
       }
-    };
+    ];
 
-    Object.entries(configs).forEach(([id, config]) => {
-      const el = document.getElementById(id);
-      if (!el) return;
+    configs.forEach(function(cfg) {
+      var el = document.getElementById(cfg.id);
+      if (!el) {
+        console.warn('Knob not found:', cfg.id);
+        return;
+      }
 
-      const valueEl = document.getElementById(config.valueEl);
+      var valueEl = document.getElementById(cfg.valueId);
 
-      this.knobs[id] = new WavrKnob(el, {
-        onChange: (value) => {
-          if (valueEl) valueEl.textContent = config.format(value);
-          if (this.pitchCorrector) {
-            const p = {};
-            p[config.param] = value;
-            this.pitchCorrector.setParams(p);
+      self.knobs[cfg.id] = new WavrKnob(el, {
+        onChange: function(value) {
+          // Update display
+          if (valueEl) {
+            valueEl.textContent = cfg.format(value);
+          }
+          // Send to corrector
+          if (self.pitchCorrector) {
+            var p = {};
+            p[cfg.param] = value;
+            self.pitchCorrector.setParams(p);
           }
         }
       });
 
-      if (valueEl) valueEl.textContent = config.format(this.knobs[id].value);
+      // Set initial display
+      if (valueEl) {
+        valueEl.textContent = cfg.format(self.knobs[cfg.id].value);
+      }
     });
   }
 
@@ -150,19 +173,21 @@ class WavrTuneApp {
   // PIANO KEYBOARD
   // ============================================
 
-  setupKeyboard() {
-    const keyboard = document.getElementById('noteGrid');
+  initKeyboard() {
+    var keyboard = document.getElementById('noteGrid');
     if (!keyboard) return;
 
-    keyboard.querySelectorAll('.piano-key').forEach(key => {
-      key.addEventListener('click', () => {
+    var keys = keyboard.querySelectorAll('.piano-key');
+    keys.forEach(function(key) {
+      key.addEventListener('click', function(e) {
+        e.preventDefault();
         key.classList.toggle('active');
       });
     });
   }
 
-  updateKeyboardForScale(key, scaleName) {
-    const scales = {
+  updateKeyboardForScale(rootKey, scaleName) {
+    var scales = {
       major: [0,2,4,5,7,9,11],
       minor: [0,2,3,5,7,8,10],
       pentatonic: [0,2,4,7,9],
@@ -172,22 +197,22 @@ class WavrTuneApp {
       chromatic: [0,1,2,3,4,5,6,7,8,9,10,11]
     };
 
-    const noteMap = {
+    var noteMap = {
       'C':0,'C#':1,'D':2,'D#':3,'E':4,'F':5,
       'F#':6,'G':7,'G#':8,'A':9,'A#':10,'B':11
     };
 
-    const root = noteMap[key] || 0;
-    const intervals = scales[scaleName] || scales.chromatic;
-    const activeNotes = intervals.map(i => (root + i) % 12);
+    var root = noteMap[rootKey] || 0;
+    var intervals = scales[scaleName] || scales.chromatic;
+    var activeNotes = intervals.map(function(i) { return (root + i) % 12; });
 
-    const keyboard = document.getElementById('noteGrid');
+    var keyboard = document.getElementById('noteGrid');
     if (!keyboard) return;
 
-    keyboard.querySelectorAll('.piano-key').forEach(k => {
-      const note = k.dataset.note;
-      const semitone = noteMap[note];
-      if (activeNotes.includes(semitone)) {
+    keyboard.querySelectorAll('.piano-key').forEach(function(k) {
+      var note = k.dataset.note;
+      var semitone = noteMap[note];
+      if (activeNotes.indexOf(semitone) !== -1) {
         k.classList.add('active');
       } else {
         k.classList.remove('active');
@@ -196,116 +221,144 @@ class WavrTuneApp {
   }
 
   // ============================================
-  // SELECTORS
+  // KEY / SCALE SELECTORS
   // ============================================
 
-  setupSelectors() {
-    const keySelect = document.getElementById('keySelect');
-    const scaleSelect = document.getElementById('scaleSelect');
+  initSelectors() {
+    var self = this;
+    var keySelect = document.getElementById('keySelect');
+    var scaleSelect = document.getElementById('scaleSelect');
 
-    const onChange = () => {
-      const key = keySelect ? keySelect.value : 'C';
-      const scale = scaleSelect ? scaleSelect.value : 'major';
+    function onChanged() {
+      var key = keySelect ? keySelect.value : 'C';
+      var scale = scaleSelect ? scaleSelect.value : 'major';
 
-      // Update displays
-      const keyDisplay = document.getElementById('keyDisplay');
-      const scaleDisplay = document.getElementById('scaleDisplay');
-      if (keyDisplay) keyDisplay.textContent = key;
-      if (scaleDisplay) scaleDisplay.textContent = scale;
+      // Update large display
+      var keyDisp = document.getElementById('keyDisplay');
+      var scaleDisp = document.getElementById('scaleDisplay');
+      if (keyDisp) keyDisp.textContent = key;
+      if (scaleDisp) scaleDisp.textContent = scale;
 
-      if (this.pitchCorrector) {
-        this.pitchCorrector.setParams({ key: key, scale: scale });
+      // Update corrector
+      if (self.pitchCorrector) {
+        self.pitchCorrector.setParams({ key: key, scale: scale });
       }
 
-      this.updateKeyboardForScale(key, scale);
-    };
+      // Update keyboard
+      self.updateKeyboardForScale(key, scale);
+    }
 
-    if (keySelect) keySelect.addEventListener('change', onChange);
-    if (scaleSelect) scaleSelect.addEventListener('change', onChange);
+    if (keySelect) keySelect.addEventListener('change', onChanged);
+    if (scaleSelect) scaleSelect.addEventListener('change', onChanged);
   }
 
   // ============================================
-  // PRESETS — Chips + Top Bar Navigation
+  // PRESET CHIPS (bottom bar)
   // ============================================
 
-  setupPresets() {
-    document.querySelectorAll('.preset-chip').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.preset-chip').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+  initPresetChips() {
+    var self = this;
+    var chips = document.querySelectorAll('.preset-chip');
 
-        const name = btn.dataset.preset;
-        const preset = PitchCorrector.presets[name];
-        if (preset) this.applyPreset(preset);
+    chips.forEach(function(chip) {
+      chip.addEventListener('click', function(e) {
+        e.preventDefault();
+
+        // Remove active from all
+        chips.forEach(function(c) { c.classList.remove('active'); });
+
+        // Set this one active
+        chip.classList.add('active');
+
+        // Get preset
+        var presetName = chip.dataset.preset;
+        var preset = PitchCorrector.presets[presetName];
+
+        if (preset) {
+          self.applyPreset(preset);
+        }
 
         // Sync top bar
-        const idx = this.presetNames.indexOf(name);
+        var idx = self.presetNames.indexOf(presetName);
         if (idx !== -1) {
-          this.currentPresetIndex = idx;
-          this.updatePresetDisplay();
+          self.currentPresetIndex = idx;
+          self.updatePresetName();
         }
       });
     });
   }
 
-  setupPresetNav() {
-    const prevBtn = document.getElementById('prevPreset');
-    const nextBtn = document.getElementById('nextPreset');
+  // ============================================
+  // PRESET NAVIGATION (top bar arrows)
+  // ============================================
+
+  initPresetNav() {
+    var self = this;
+    var prevBtn = document.getElementById('prevPreset');
+    var nextBtn = document.getElementById('nextPreset');
 
     if (prevBtn) {
-      prevBtn.addEventListener('click', () => {
-        this.currentPresetIndex = (this.currentPresetIndex - 1 + this.presetNames.length) % this.presetNames.length;
-        this.activatePresetByIndex(this.currentPresetIndex);
+      prevBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        self.currentPresetIndex = (self.currentPresetIndex - 1 + self.presetNames.length) % self.presetNames.length;
+        self.selectPresetByIndex(self.currentPresetIndex);
       });
     }
 
     if (nextBtn) {
-      nextBtn.addEventListener('click', () => {
-        this.currentPresetIndex = (this.currentPresetIndex + 1) % this.presetNames.length;
-        this.activatePresetByIndex(this.currentPresetIndex);
+      nextBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        self.currentPresetIndex = (self.currentPresetIndex + 1) % self.presetNames.length;
+        self.selectPresetByIndex(self.currentPresetIndex);
       });
     }
   }
 
-  activatePresetByIndex(index) {
-    const name = this.presetNames[index];
-    const preset = PitchCorrector.presets[name];
+  selectPresetByIndex(index) {
+    var name = this.presetNames[index];
+    var preset = PitchCorrector.presets[name];
 
     if (preset) this.applyPreset(preset);
 
-    // Update chip highlight
-    document.querySelectorAll('.preset-chip').forEach(b => {
-      b.classList.toggle('active', b.dataset.preset === name);
+    // Update chips
+    document.querySelectorAll('.preset-chip').forEach(function(c) {
+      if (c.dataset.preset === name) {
+        c.classList.add('active');
+      } else {
+        c.classList.remove('active');
+      }
     });
 
-    this.updatePresetDisplay();
+    this.updatePresetName();
   }
 
-  updatePresetDisplay() {
-    const nameEl = document.getElementById('currentPresetName');
-    if (nameEl) {
-      nameEl.textContent = this.presetLabels[this.currentPresetIndex];
+  updatePresetName() {
+    var el = document.getElementById('currentPresetName');
+    if (el) {
+      el.textContent = this.presetLabels[this.currentPresetIndex];
     }
   }
 
   applyPreset(preset) {
-    const mapping = {
-      correction: { knobId: 'correctionKnob', valueEl: 'correctionValue', format: (v) => Math.round(v) + '%' },
-      speed: { knobId: 'speedKnob', valueEl: 'speedValue', format: (v) => Math.round(v * 0.5) + 'ms' },
-      humanize: { knobId: 'humanizeKnob', valueEl: 'humanizeValue', format: (v) => Math.round(v).toString() },
-      formant: { knobId: 'formantKnob', valueEl: 'formantValue', format: (v) => { const st = Math.round((v-50)*0.24); return (st>=0?'+':'') + st; }},
-      mix: { knobId: 'mixKnob', valueEl: 'mixValue', format: (v) => Math.round(v).toString() }
-    };
+    var self = this;
 
-    Object.entries(preset).forEach(([param, value]) => {
-      const m = mapping[param];
-      if (!m) return;
+    var mapping = [
+      { param: 'correction', knobId: 'correctionKnob', valueId: 'correctionValue', format: function(v) { return Math.round(v) + '%'; } },
+      { param: 'speed', knobId: 'speedKnob', valueId: 'speedValue', format: function(v) { return Math.round(v * 0.5) + 'ms'; } },
+      { param: 'humanize', knobId: 'humanizeKnob', valueId: 'humanizeValue', format: function(v) { return Math.round(v).toString(); } },
+      { param: 'formant', knobId: 'formantKnob', valueId: 'formantValue', format: function(v) { var st = Math.round((v-50)*0.24); return (st>=0?'+':'') + st; } },
+      { param: 'mix', knobId: 'mixKnob', valueId: 'mixValue', format: function(v) { return Math.round(v).toString(); } }
+    ];
 
-      const knob = this.knobs[m.knobId];
+    mapping.forEach(function(m) {
+      var val = preset[m.param];
+      if (val === undefined) return;
+
+      var knob = self.knobs[m.knobId];
       if (knob) {
-        knob.setValue(value);
-        const el = document.getElementById(m.valueEl);
-        if (el) el.textContent = m.format(value);
+        knob.setValue(val);
+        var el = document.getElementById(m.valueId);
+        if (el) el.textContent = m.format(val);
       }
     });
 
@@ -318,29 +371,51 @@ class WavrTuneApp {
   // BUTTONS
   // ============================================
 
-  setupButtons() {
-    const startBtn = document.getElementById('startBtn');
-    const fileBtn = document.getElementById('fileBtn');
-    const fileInput = document.getElementById('audioFileInput');
-    const bypassBtn = document.getElementById('bypassBtn');
+  initButtons() {
+    var self = this;
 
-    if (startBtn) startBtn.addEventListener('click', () => this.toggleListening());
+    // Start / Stop
+    var startBtn = document.getElementById('startBtn');
+    if (startBtn) {
+      startBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        self.toggleListening();
+      });
+    }
 
+    // Load file
+    var fileBtn = document.getElementById('fileBtn');
+    var fileInput = document.getElementById('audioFileInput');
     if (fileBtn && fileInput) {
-      fileBtn.addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) this.loadAudioFile(file);
+      fileBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        fileInput.click();
+      });
+      fileInput.addEventListener('change', function(e) {
+        var file = e.target.files[0];
+        if (file) self.loadAudioFile(file);
         fileInput.value = '';
       });
     }
 
+    // Bypass
+    var bypassBtn = document.getElementById('bypassBtn');
     if (bypassBtn) {
-      bypassBtn.addEventListener('click', () => {
-        this.isBypassed = !this.isBypassed;
-        bypassBtn.classList.toggle('active', this.isBypassed);
+      bypassBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        self.isBypassed = !self.isBypassed;
+        bypassBtn.classList.toggle('active', self.isBypassed);
       });
     }
+  }
+
+  // ============================================
+  // VISUALIZER
+  // ============================================
+
+  initVisualizer() {
+    this.visualizer = new PitchVisualizer('pitchCanvas');
+    this.visualizer.startAnimation();
   }
 
   // ============================================
@@ -361,16 +436,14 @@ class WavrTuneApp {
     this.pitchDetector = new PitchDetector(this.audioContext.sampleRate);
     this.pitchCorrector = new PitchCorrector(this.audioContext.sampleRate);
 
-    this.analyserNode = this.audioContext.createAnalyser();
-    this.analyserNode.fftSize = this.analyserBufferSize;
-
     this.syncAllParams();
   }
 
   syncAllParams() {
     if (!this.pitchCorrector) return;
-    const keySelect = document.getElementById('keySelect');
-    const scaleSelect = document.getElementById('scaleSelect');
+
+    var keySelect = document.getElementById('keySelect');
+    var scaleSelect = document.getElementById('scaleSelect');
 
     this.pitchCorrector.setParams({
       key: keySelect ? keySelect.value : 'C',
@@ -404,25 +477,29 @@ class WavrTuneApp {
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: false,
-          sampleRate: 48000
+          autoGainControl: false
         }
       });
 
       this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
-      this.processorNode = this.audioContext.createScriptProcessor(2048, 1, 1);
 
-      this.processorNode.onaudioprocess = (e) => this.processFrame(e);
+      var bufferSize = 2048;
+      this.processorNode = this.audioContext.createScriptProcessor(bufferSize, 1, 1);
+
+      var self = this;
+      this.processorNode.onaudioprocess = function(e) {
+        self.processFrame(e);
+      };
 
       this.sourceNode.connect(this.processorNode);
       this.processorNode.connect(this.audioContext.destination);
 
       this.isListening = true;
-      this.updateUI(true);
+      this.updateButtonUI(true);
 
     } catch (err) {
       console.error('Mic error:', err);
-      alert('Could not access microphone. Please allow permission and use HTTPS.');
+      alert('Could not access microphone.\nAllow permission and use HTTPS.');
     }
   }
 
@@ -437,13 +514,15 @@ class WavrTuneApp {
       this.sourceNode = null;
     }
     if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(t => t.stop());
+      this.mediaStream.getTracks().forEach(function(t) { t.stop(); });
       this.mediaStream = null;
     }
-    if (this.pitchCorrector) this.pitchCorrector.reset();
+    if (this.pitchCorrector) {
+      this.pitchCorrector.reset();
+    }
 
     this.isListening = false;
-    this.updateUI(false);
+    this.updateButtonUI(false);
     this.resetDisplay();
   }
 
@@ -457,8 +536,8 @@ class WavrTuneApp {
       this.stopListening();
       this.stopFile();
 
-      const buffer = await file.arrayBuffer();
-      const audioBuffer = await this.audioContext.decodeAudioData(buffer);
+      var arrayBuf = await file.arrayBuffer();
+      var audioBuffer = await this.audioContext.decodeAudioData(arrayBuf);
 
       this.processFileViz(audioBuffer);
       this.playFile(audioBuffer);
@@ -470,33 +549,35 @@ class WavrTuneApp {
   }
 
   processFileViz(audioBuffer) {
-    const data = audioBuffer.getChannelData(0);
-    const chunkSize = 2048;
-    const hopSize = 1024;
+    var data = audioBuffer.getChannelData(0);
+    var chunkSize = 2048;
+    var hopSize = 1024;
+    var self = this;
 
     this.visualizer.clear();
-    let idx = 0;
+    var idx = 0;
 
-    const process = () => {
-      for (let c = 0; c < 8; c++) {
+    function process() {
+      for (var c = 0; c < 8; c++) {
         if (idx >= data.length - chunkSize) return;
 
-        const chunk = data.slice(idx, idx + chunkSize);
-        const det = this.pitchDetector.detect(chunk);
-        const noteInfo = this.pitchDetector.frequencyToNote(det.frequency);
+        var chunk = data.slice(idx, idx + chunkSize);
+        var det = self.pitchDetector.detect(chunk);
+        var noteInfo = self.pitchDetector.frequencyToNote(det.frequency);
 
-        let target = det.frequency;
+        var target = det.frequency;
         if (noteInfo && det.frequency > 0) {
-          const scale = this.pitchCorrector.getScaleNotes();
-          target = this.pitchCorrector.getTargetFrequency(det.frequency, scale);
+          var scaleNotes = self.pitchCorrector.getScaleNotes();
+          target = self.pitchCorrector.getTargetFrequency(det.frequency, scaleNotes);
         }
 
-        this.visualizer.pushData(det.frequency, target);
-        this.updateDisplay(noteInfo, det);
+        self.visualizer.pushData(det.frequency, target);
+        self.updateDisplay(noteInfo, det);
         idx += hopSize;
       }
       requestAnimationFrame(process);
-    };
+    }
+
     process();
   }
 
@@ -504,7 +585,8 @@ class WavrTuneApp {
     this.fileSource = this.audioContext.createBufferSource();
     this.fileSource.buffer = audioBuffer;
     this.fileSource.connect(this.audioContext.destination);
-    this.fileSource.onended = () => { this.isPlayingFile = false; };
+    var self = this;
+    this.fileSource.onended = function() { self.isPlayingFile = false; };
     this.fileSource.start();
     this.isPlayingFile = true;
   }
@@ -523,85 +605,96 @@ class WavrTuneApp {
   // ============================================
 
   processFrame(e) {
-    const input = e.inputBuffer.getChannelData(0);
-    const output = e.outputBuffer.getChannelData(0);
+    var input = e.inputBuffer.getChannelData(0);
+    var output = e.outputBuffer.getChannelData(0);
 
-    const det = this.pitchDetector.detect(input);
-    const noteInfo = this.pitchDetector.frequencyToNote(det.frequency);
+    var det = this.pitchDetector.detect(input);
+    var noteInfo = this.pitchDetector.frequencyToNote(det.frequency);
 
-    let target = det.frequency;
+    var target = det.frequency;
     if (noteInfo && det.frequency > 0) {
-      const scale = this.pitchCorrector.getScaleNotes();
-      target = this.pitchCorrector.getTargetFrequency(det.frequency, scale);
+      var scaleNotes = this.pitchCorrector.getScaleNotes();
+      target = this.pitchCorrector.getTargetFrequency(det.frequency, scaleNotes);
     }
 
     if (this.isBypassed) {
       output.set(input);
     } else {
-      const corrected = this.pitchCorrector.processBuffer(input, det.frequency);
+      var corrected = this.pitchCorrector.processBuffer(input, det.frequency);
       output.set(corrected);
     }
 
     this.visualizer.pushData(det.frequency, target);
-    this.visualizer.setClarity(det.clarity);
+    if (this.visualizer.setClarity) {
+      this.visualizer.setClarity(det.clarity);
+    }
     this.updateDisplay(noteInfo, det);
   }
 
   // ============================================
-  // UI UPDATES
+  // DISPLAY UPDATES
   // ============================================
 
   updateDisplay(noteInfo, detection) {
-    const noteEl = document.getElementById('currentNote');
-    const freqEl = document.getElementById('currentFreq');
-    const centsEl = document.getElementById('centsValue');
-    const centsIndicator = document.getElementById('centsIndicator');
+    var noteEl = document.getElementById('currentNote');
+    var freqEl = document.getElementById('currentFreq');
+    var centsEl = document.getElementById('centsValue');
+    var centsInd = document.getElementById('centsIndicator');
 
     if (noteInfo && detection && detection.frequency > 0) {
       if (noteEl) noteEl.textContent = noteInfo.note + noteInfo.octave;
       if (freqEl) freqEl.textContent = detection.frequency.toFixed(1) + ' Hz';
+
       if (centsEl) {
-        const sign = noteInfo.cents > 0 ? '+' : '';
+        var sign = noteInfo.cents > 0 ? '+' : '';
         centsEl.textContent = sign + noteInfo.cents;
       }
 
-      // Move cents indicator (map -50 to +50 cents → 0% to 100%)
-      if (centsIndicator) {
-        const pct = Math.max(0, Math.min(100, (noteInfo.cents + 50) / 100 * 100));
-        centsIndicator.style.left = pct + '%';
+      // Cents indicator position (map -50..+50 to 0%..100%)
+      if (centsInd) {
+        var clamped = Math.max(-50, Math.min(50, noteInfo.cents));
+        var pct = ((clamped + 50) / 100) * 100;
+        centsInd.style.left = pct + '%';
       }
 
-      // Highlight piano key
-      document.querySelectorAll('.piano-key').forEach(k => {
+      // Highlight current piano key
+      document.querySelectorAll('.piano-key').forEach(function(k) {
         k.classList.remove('current');
-        if (k.dataset.note === noteInfo.note) k.classList.add('current');
+        if (k.dataset.note === noteInfo.note) {
+          k.classList.add('current');
+        }
       });
 
     } else {
       if (noteEl) noteEl.textContent = '—';
       if (freqEl) freqEl.textContent = '— Hz';
       if (centsEl) centsEl.textContent = '0';
-      if (centsIndicator) centsIndicator.style.left = '50%';
-      document.querySelectorAll('.piano-key').forEach(k => k.classList.remove('current'));
+      if (centsInd) centsInd.style.left = '50%';
+      document.querySelectorAll('.piano-key').forEach(function(k) {
+        k.classList.remove('current');
+      });
     }
   }
 
   resetDisplay() {
-    const noteEl = document.getElementById('currentNote');
-    const freqEl = document.getElementById('currentFreq');
-    const centsEl = document.getElementById('centsValue');
-    const centsIndicator = document.getElementById('centsIndicator');
+    var noteEl = document.getElementById('currentNote');
+    var freqEl = document.getElementById('currentFreq');
+    var centsEl = document.getElementById('centsValue');
+    var centsInd = document.getElementById('centsIndicator');
 
     if (noteEl) noteEl.textContent = '—';
     if (freqEl) freqEl.textContent = '0 Hz';
     if (centsEl) centsEl.textContent = '0';
-    if (centsIndicator) centsIndicator.style.left = '50%';
-    document.querySelectorAll('.piano-key').forEach(k => k.classList.remove('current'));
+    if (centsInd) centsInd.style.left = '50%';
+
+    document.querySelectorAll('.piano-key').forEach(function(k) {
+      k.classList.remove('current');
+    });
   }
 
-  updateUI(listening) {
-    const btn = document.getElementById('startBtn');
-    const led = document.getElementById('statusLed');
+  updateButtonUI(listening) {
+    var btn = document.getElementById('startBtn');
+    var led = document.getElementById('statusLed');
 
     if (btn) {
       if (listening) {
@@ -621,15 +714,26 @@ class WavrTuneApp {
     }
 
     if (led) {
-      led.classList.toggle('active', listening);
+      if (listening) {
+        led.classList.add('active');
+      } else {
+        led.classList.remove('active');
+      }
     }
   }
+
+  // ============================================
+  // CLEANUP
+  // ============================================
 
   destroy() {
     this.stopListening();
     this.stopFile();
     if (this.visualizer) this.visualizer.destroy();
-    Object.values(this.knobs).forEach(k => { if (k.destroy) k.destroy(); });
+    var knobs = this.knobs;
+    Object.keys(knobs).forEach(function(k) {
+      if (knobs[k].destroy) knobs[k].destroy();
+    });
     if (this.audioContext) this.audioContext.close();
   }
 }
@@ -637,6 +741,6 @@ class WavrTuneApp {
 // ============================================
 // BOOT
 // ============================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
   window.wavrTune = new WavrTuneApp();
 });
