@@ -1,8 +1,13 @@
 // ============================================
-// WAVR TUNE — Glossy Knob Component
-// Drag up/down to change value
-// Scroll wheel support
-// Double-click to reset
+// WAVR TUNE — 3D Metallic Knob Component
+// Updated for new .knob-3d HTML structure
+//
+// Features:
+// - Click + drag up/down to change value
+// - Scroll wheel
+// - Shift + drag for fine control
+// - Double click to reset
+// - Touch support
 // ============================================
 
 class WavrKnob {
@@ -19,40 +24,39 @@ class WavrKnob {
     this.startY = 0;
     this.startValue = 0;
 
-    // DOM references
-    this.innerEl = element.querySelector('.knob-inner');
-    this.gripEl = element.querySelector('.knob-grip');
-    this.fillEl = element.querySelector('.knob-fill');
+    // Find elements in new structure
+    // Support both old (.knob-inner) and new (.knob-3d-cap) structures
+    this.capEl = element.querySelector('.knob-3d-cap') || element.querySelector('.knob-inner');
+    this.bodyEl = element.querySelector('.knob-3d-body');
+    this.fillEl = element.querySelector('.knob-ring-fill') || element.querySelector('.knob-fill');
 
     this.init();
     this.updateVisual();
   }
 
   init() {
-    // Mouse events
+    // Mouse
     this.element.addEventListener('mousedown', (e) => this.onDragStart(e));
-    
-    // We bind to document so dragging works even if cursor leaves the knob
     this.boundDrag = (e) => this.onDragMove(e);
     this.boundDragEnd = () => this.onDragEnd();
     document.addEventListener('mousemove', this.boundDrag);
     document.addEventListener('mouseup', this.boundDragEnd);
 
-    // Touch events for mobile
+    // Touch
     this.element.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
     this.boundTouchMove = (e) => this.onTouchMove(e);
     this.boundTouchEnd = () => this.onDragEnd();
     document.addEventListener('touchmove', this.boundTouchMove, { passive: false });
     document.addEventListener('touchend', this.boundTouchEnd);
 
-    // Double click resets to default
+    // Double click reset
     this.element.addEventListener('dblclick', () => {
       this.value = this.defaultValue;
       this.updateVisual();
       this.onChange(this.value);
     });
 
-    // Scroll wheel for fine control
+    // Scroll wheel
     this.element.addEventListener('wheel', (e) => {
       e.preventDefault();
       const direction = e.deltaY > 0 ? -1 : 1;
@@ -65,6 +69,7 @@ class WavrKnob {
 
   onDragStart(e) {
     e.preventDefault();
+    e.stopPropagation();
     this.isDragging = true;
     this.startY = e.clientY;
     this.startValue = this.value;
@@ -83,12 +88,10 @@ class WavrKnob {
 
   onDragMove(e) {
     if (!this.isDragging) return;
-
     const deltaY = this.startY - e.clientY;
     const range = this.max - this.min;
-    const sensitivity = e.shiftKey ? 400 : 200; // shift = fine control
+    const sensitivity = e.shiftKey ? 400 : 150;
     const newValue = this.startValue + (deltaY / sensitivity) * range;
-
     this.value = this.clamp(Math.round(newValue / this.step) * this.step);
     this.updateVisual();
     this.onChange(this.value);
@@ -97,12 +100,10 @@ class WavrKnob {
   onTouchMove(e) {
     if (!this.isDragging) return;
     e.preventDefault();
-
     const deltaY = this.startY - e.touches[0].clientY;
     const range = this.max - this.min;
-    const sensitivity = 200;
+    const sensitivity = 150;
     const newValue = this.startValue + (deltaY / sensitivity) * range;
-
     this.value = this.clamp(Math.round(newValue / this.step) * this.step);
     this.updateVisual();
     this.onChange(this.value);
@@ -121,25 +122,28 @@ class WavrKnob {
   }
 
   updateVisual() {
-    // Normalize value 0-1
     const normalized = (this.value - this.min) / (this.max - this.min);
 
-    // Rotation: -135deg (min) to +135deg (max) = 270deg total sweep
+    // Rotate: -135° to +135° (270° sweep)
     const angle = -135 + (normalized * 270);
 
-    // Rotate the inner knob disc + grip indicator
-    if (this.innerEl) {
-      this.innerEl.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+    // Rotate the cap/body that holds the indicator
+    if (this.capEl) {
+      this.capEl.style.transform = 'translate(-50%, -50%) rotate(' + angle + 'deg)';
     }
 
-    // Update SVG ring arc fill
+    // If there's a separate body element, rotate that too
+    // (for the 3D structure where cap is inside body)
+    if (this.bodyEl && !this.capEl) {
+      this.bodyEl.style.transform = 'translate(-50%, -50%) rotate(' + angle + 'deg)';
+    }
+
+    // Update SVG ring fill
     if (this.fillEl) {
-      // Circle circumference = 2 * PI * r = 2 * 3.14159 * 52 ≈ 326.7
-      // We only use 270/360 of it = ~245
-      const totalArc = (270 / 360) * (2 * Math.PI * 52);
-      const filledArc = totalArc - (normalized * totalArc);
-      this.fillEl.style.strokeDasharray = `${totalArc}`;
-      this.fillEl.style.strokeDashoffset = `${filledArc}`;
+      var totalArc = (270 / 360) * (2 * Math.PI * 52); // ~245
+      var filledArc = totalArc - (normalized * totalArc);
+      this.fillEl.style.strokeDasharray = totalArc;
+      this.fillEl.style.strokeDashoffset = filledArc;
     }
   }
 
@@ -152,7 +156,6 @@ class WavrKnob {
     return this.value;
   }
 
-  // Clean up event listeners if needed
   destroy() {
     document.removeEventListener('mousemove', this.boundDrag);
     document.removeEventListener('mouseup', this.boundDragEnd);
@@ -161,5 +164,4 @@ class WavrKnob {
   }
 }
 
-// Make available globally
 window.WavrKnob = WavrKnob;
