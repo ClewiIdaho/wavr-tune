@@ -10,239 +10,320 @@
 <body>
   <div class="wavr-tune-container">
     
-    <div class="plugin-header">
-      <div class="header-left">
-        <div class="plugin-logo">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <!-- ============ TOP BAR ============ -->
+    <div class="top-bar">
+      <div class="top-bar-left">
+        <div class="logo-mark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M2 12C2 12 4 8 6 8C8 8 8 16 10 16C12 16 12 4 14 4C16 4 16 14 18 14C20 14 22 12 22 12" 
                   stroke="url(#logoGrad)" stroke-width="2.5" stroke-linecap="round"/>
             <defs>
               <linearGradient id="logoGrad" x1="2" y1="4" x2="22" y2="16">
-                <stop offset="0%" stop-color="#8B5CF6"/>
-                <stop offset="100%" stop-color="#C084FC"/>
+                <stop offset="0%" stop-color="#a855f7"/>
+                <stop offset="100%" stop-color="#7c3aed"/>
               </linearGradient>
             </defs>
           </svg>
         </div>
-        <div class="plugin-title">
-          <h1>WAVR Tune</h1>
-          <span class="subtitle">Pitch Correction Engine</span>
+        <span class="logo-text">WAVR TUNE</span>
+      </div>
+      <div class="top-bar-center">
+        <div class="preset-selector">
+          <button class="preset-arrow" id="prevPreset">‹</button>
+          <span class="preset-name" id="currentPresetName">Modern</span>
+          <button class="preset-arrow" id="nextPreset">›</button>
         </div>
       </div>
-      <div class="header-right">
-        <div class="status-indicator active">
-          <span class="status-dot"></span>
-          <span>Active</span>
-        </div>
-        <button class="bypass-btn" id="bypassBtn">BYPASS</button>
-        <button class="close-btn">✕</button>
-      </div>
-    </div>
-
-    <div class="pitch-display-section">
-      <div class="pitch-display glass-panel">
-        <canvas id="pitchCanvas" width="800" height="200"></canvas>
-        <div class="pitch-info-overlay">
-          <div class="current-note" id="currentNote">—</div>
-          <div class="current-freq" id="currentFreq">0 Hz</div>
-          <div class="cents-display" id="centsDisplay">
-            <span class="cents-value">0</span>
-            <span class="cents-label">cents</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="note-grid-section glass-panel">
-      <div class="section-label">CHROMATIC NOTE SELECT</div>
-      <div class="note-grid" id="noteGrid">
-        <button class="note-btn active" data-note="C">C</button>
-        <button class="note-btn" data-note="C#">C#</button>
-        <button class="note-btn active" data-note="D">D</button>
-        <button class="note-btn" data-note="D#">D#</button>
-        <button class="note-btn active" data-note="E">E</button>
-        <button class="note-btn active" data-note="F">F</button>
-        <button class="note-btn" data-note="F#">F#</button>
-        <button class="note-btn active" data-note="G">G</button>
-        <button class="note-btn" data-note="G#">G#</button>
-        <button class="note-btn active" data-note="A">A</button>
-        <button class="note-btn" data-note="A#">A#</button>
-        <button class="note-btn active" data-note="B">B</button>
-      </div>
-    </div>
-
-    <div class="selectors-row">
-      <div class="selector glass-panel">
-        <label>KEY</label>
-        <select id="keySelect">
-          <option value="C">C</option>
-          <option value="C#">C# / Db</option>
-          <option value="D">D</option>
-          <option value="D#">D# / Eb</option>
-          <option value="E">E</option>
-          <option value="F">F</option>
-          <option value="F#">F# / Gb</option>
-          <option value="G">G</option>
-          <option value="G#">G# / Ab</option>
-          <option value="A">A</option>
-          <option value="A#">A# / Bb</option>
-          <option value="B">B</option>
-        </select>
-      </div>
-      <div class="selector glass-panel">
-        <label>SCALE</label>
-        <select id="scaleSelect">
-          <option value="major">Major</option>
-          <option value="minor">Natural Minor</option>
-          <option value="pentatonic">Pentatonic</option>
-          <option value="blues">Blues</option>
-          <option value="dorian">Dorian</option>
-          <option value="mixolydian">Mixolydian</option>
-          <option value="chromatic">Chromatic</option>
-        </select>
-      </div>
-      <div class="selector glass-panel">
-        <label>INPUT</label>
-        <select id="inputSelect">
-          <option value="mic">Microphone</option>
-          <option value="file">Audio File</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="knobs-section">
-      <div class="knob-group glass-panel">
-        <div class="knob-wrapper">
-          <div class="knob" id="correctionKnob" data-value="75" data-min="0" data-max="100">
-            <div class="knob-outer">
-              <div class="knob-inner">
-                <div class="knob-grip"></div>
-              </div>
-              <svg class="knob-ring" viewBox="0 0 120 120">
-                <circle class="knob-track" cx="60" cy="60" r="52"/>
-                <circle class="knob-fill" cx="60" cy="60" r="52"/>
-              </svg>
-            </div>
-          </div>
-          <div class="knob-label">CORRECTION</div>
-          <div class="knob-value" id="correctionValue">75%</div>
-        </div>
-      </div>
-
-      <div class="knob-group glass-panel">
-        <div class="knob-wrapper">
-          <div class="knob" id="speedKnob" data-value="25" data-min="0" data-max="100">
-            <div class="knob-outer">
-              <div class="knob-inner">
-                <div class="knob-grip"></div>
-              </div>
-              <svg class="knob-ring" viewBox="0 0 120 120">
-                <circle class="knob-track" cx="60" cy="60" r="52"/>
-                <circle class="knob-fill" cx="60" cy="60" r="52"/>
-              </svg>
-            </div>
-          </div>
-          <div class="knob-label">SPEED</div>
-          <div class="knob-value" id="speedValue">25ms</div>
-        </div>
-      </div>
-
-      <div class="knob-group glass-panel">
-        <div class="knob-wrapper">
-          <div class="knob" id="humanizeKnob" data-value="30" data-min="0" data-max="100">
-            <div class="knob-outer">
-              <div class="knob-inner">
-                <div class="knob-grip"></div>
-              </div>
-              <svg class="knob-ring" viewBox="0 0 120 120">
-                <circle class="knob-track" cx="60" cy="60" r="52"/>
-                <circle class="knob-fill" cx="60" cy="60" r="52"/>
-              </svg>
-            </div>
-          </div>
-          <div class="knob-label">HUMANIZE</div>
-          <div class="knob-value" id="humanizeValue">30%</div>
-        </div>
-      </div>
-
-      <div class="knob-group glass-panel">
-        <div class="knob-wrapper">
-          <div class="knob" id="formantKnob" data-value="50" data-min="0" data-max="100">
-            <div class="knob-outer">
-              <div class="knob-inner">
-                <div class="knob-grip"></div>
-              </div>
-              <svg class="knob-ring" viewBox="0 0 120 120">
-                <circle class="knob-track" cx="60" cy="60" r="52"/>
-                <circle class="knob-fill" cx="60" cy="60" r="52"/>
-              </svg>
-            </div>
-          </div>
-          <div class="knob-label">FORMANT</div>
-          <div class="knob-value" id="formantValue">0st</div>
-        </div>
-      </div>
-
-      <div class="knob-group glass-panel">
-        <div class="knob-wrapper">
-          <div class="knob" id="mixKnob" data-value="85" data-min="0" data-max="100">
-            <div class="knob-outer">
-              <div class="knob-inner">
-                <div class="knob-grip"></div>
-              </div>
-              <svg class="knob-ring" viewBox="0 0 120 120">
-                <circle class="knob-track" cx="60" cy="60" r="52"/>
-                <circle class="knob-fill" cx="60" cy="60" r="52"/>
-              </svg>
-            </div>
-          </div>
-          <div class="knob-label">MIX</div>
-          <div class="knob-value" id="mixValue">85%</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="presets-section glass-panel">
-      <div class="section-label">PRESETS</div>
-      <div class="presets-row">
-        <button class="preset-btn" data-preset="natural">
-          <span class="preset-icon">🎵</span>
-          <span>Natural</span>
-        </button>
-        <button class="preset-btn" data-preset="soft">
-          <span class="preset-icon">🎤</span>
-          <span>Soft Snap</span>
-        </button>
-        <button class="preset-btn active" data-preset="modern">
-          <span class="preset-icon">🎧</span>
-          <span>Modern</span>
-        </button>
-        <button class="preset-btn" data-preset="hardtune">
-          <span class="preset-icon">🤖</span>
-          <span>Hard Tune</span>
-        </button>
-        <button class="preset-btn" data-preset="tpain">
-          <span class="preset-icon">💎</span>
-          <span>T-Pain</span>
+      <div class="top-bar-right">
+        <div class="status-led" id="statusLed"></div>
+        <button class="bypass-toggle" id="bypassBtn">
+          <span class="bypass-dot"></span>
+          BYPASS
         </button>
       </div>
     </div>
 
-    <div class="controls-footer">
-      <button class="action-btn" id="startBtn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M8 5v14l11-7z"/>
-        </svg>
-        Start Listening
-      </button>
-      <button class="action-btn secondary" id="fileBtn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-        </svg>
-        Load Audio
-      </button>
-      <input type="file" id="audioFileInput" accept="audio/*" style="display:none">
+    <!-- ============ MAIN BODY ============ -->
+    <div class="main-body">
+      
+      <!-- LEFT SECTION: Key + Pitch Info -->
+      <div class="section-left">
+        
+        <!-- Key Display (XPITCH style) -->
+        <div class="key-display-panel metal-panel">
+          <div class="section-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18V5l12-2v13M9 18c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3zM21 16c0 1.657-1.343 3-3 3s-3-1.343-3-3 1.343-3 3-3 3 1.343 3 3z"/>
+            </svg>
+            <span>TUNE</span>
+          </div>
+          <div class="key-note" id="keyDisplay">C</div>
+          <div class="key-scale" id="scaleDisplay">major</div>
+          <div class="key-selectors">
+            <select id="keySelect" class="metal-select">
+              <option value="C">C</option>
+              <option value="C#">C#</option>
+              <option value="D">D</option>
+              <option value="D#">D#</option>
+              <option value="E">E</option>
+              <option value="F">F</option>
+              <option value="F#">F#</option>
+              <option value="G">G</option>
+              <option value="G#">G#</option>
+              <option value="A">A</option>
+              <option value="A#">A#</option>
+              <option value="B">B</option>
+            </select>
+            <select id="scaleSelect" class="metal-select">
+              <option value="major">Major</option>
+              <option value="minor">Minor</option>
+              <option value="pentatonic">Pentatonic</option>
+              <option value="blues">Blues</option>
+              <option value="dorian">Dorian</option>
+              <option value="mixolydian">Mixolydian</option>
+              <option value="chromatic">Chromatic</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Correction + Speed Knobs -->
+        <div class="dual-knob-row">
+          <div class="knob-unit">
+            <div class="knob-3d" id="correctionKnob" data-value="75" data-min="0" data-max="100">
+              <div class="knob-3d-outer">
+                <div class="knob-3d-body">
+                  <div class="knob-3d-cap">
+                    <div class="knob-3d-indicator"></div>
+                  </div>
+                </div>
+                <svg class="knob-3d-ring" viewBox="0 0 120 120">
+                  <circle class="knob-ring-track" cx="60" cy="60" r="52"/>
+                  <circle class="knob-ring-fill" cx="60" cy="60" r="52"/>
+                </svg>
+              </div>
+              <div class="knob-3d-label">CORRECTION</div>
+              <div class="knob-3d-value" id="correctionValue">75%</div>
+            </div>
+            <div class="knob-unit">
+              <div class="knob-3d" id="speedKnob" data-value="25" data-min="0" data-max="100">
+                <div class="knob-3d-outer">
+                  <div class="knob-3d-body">
+                    <div class="knob-3d-cap">
+                      <div class="knob-3d-indicator"></div>
+                    </div>
+                  </div>
+                  <svg class="knob-3d-ring" viewBox="0 0 120 120">
+                    <circle class="knob-ring-track" cx="60" cy="60" r="52"/>
+                    <circle class="knob-ring-fill" cx="60" cy="60" r="52"/>
+                  </svg>
+                </div>
+                <div class="knob-3d-label">SPEED</div>
+                <div class="knob-3d-value" id="speedValue">12ms</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CENTER SECTION: Orbital Pitch Display -->
+      <div class="section-center">
+        
+        <!-- Pitch Orb (PolyTune inspired) -->
+        <div class="pitch-orb-container metal-panel">
+          <div class="section-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 2a10 10 0 0 1 0 20"/>
+              <line x1="12" y1="2" x2="12" y2="22"/>
+            </svg>
+            <span>PITCH</span>
+          </div>
+          <div class="pitch-orb">
+            <canvas id="pitchCanvas" width="280" height="280"></canvas>
+            <div class="orb-note-display">
+              <div class="orb-note" id="currentNote">—</div>
+              <div class="orb-freq" id="currentFreq">0 Hz</div>
+            </div>
+          </div>
+          <div class="cents-bar">
+            <span class="cents-label-side">-50</span>
+            <div class="cents-track">
+              <div class="cents-center-line"></div>
+              <div class="cents-indicator" id="centsIndicator"></div>
+            </div>
+            <span class="cents-label-side">+50</span>
+          </div>
+          <div class="cents-readout">
+            <span class="cents-value" id="centsValue">0</span>
+            <span class="cents-unit">cents</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT SECTION: Humanize, Formant, Mix -->
+      <div class="section-right">
+        
+        <!-- Ring Meter Knobs (PolyTune style with XVOX metallic) -->
+        <div class="ring-knob-stack">
+          
+          <div class="ring-knob-unit">
+            <div class="knob-3d small" id="humanizeKnob" data-value="30" data-min="0" data-max="100">
+              <div class="knob-3d-outer">
+                <div class="knob-3d-body">
+                  <div class="knob-3d-cap">
+                    <div class="knob-3d-indicator"></div>
+                  </div>
+                </div>
+                <svg class="knob-3d-ring" viewBox="0 0 120 120">
+                  <circle class="knob-ring-track" cx="60" cy="60" r="52"/>
+                  <circle class="knob-ring-fill" cx="60" cy="60" r="52"/>
+                </svg>
+              </div>
+              <div class="ring-knob-readout">
+                <span class="ring-knob-number" id="humanizeValue">30</span>
+                <span class="ring-knob-suffix">%</span>
+              </div>
+              <div class="knob-3d-label">HUMANIZE</div>
+            </div>
+          </div>
+
+          <div class="ring-knob-unit">
+            <div class="knob-3d small" id="formantKnob" data-value="50" data-min="0" data-max="100">
+              <div class="knob-3d-outer">
+                <div class="knob-3d-body">
+                  <div class="knob-3d-cap">
+                    <div class="knob-3d-indicator"></div>
+                  </div>
+                </div>
+                <svg class="knob-3d-ring" viewBox="0 0 120 120">
+                  <circle class="knob-ring-track" cx="60" cy="60" r="52"/>
+                  <circle class="knob-ring-fill" cx="60" cy="60" r="52"/>
+                </svg>
+              </div>
+              <div class="ring-knob-readout">
+                <span class="ring-knob-number" id="formantValue">0</span>
+                <span class="ring-knob-suffix">st</span>
+              </div>
+              <div class="knob-3d-label">FORMANT</div>
+            </div>
+          </div>
+
+          <div class="ring-knob-unit">
+            <div class="knob-3d small" id="mixKnob" data-value="85" data-min="0" data-max="100">
+              <div class="knob-3d-outer">
+                <div class="knob-3d-body">
+                  <div class="knob-3d-cap">
+                    <div class="knob-3d-indicator"></div>
+                  </div>
+                </div>
+                <svg class="knob-3d-ring" viewBox="0 0 120 120">
+                  <circle class="knob-ring-track" cx="60" cy="60" r="52"/>
+                  <circle class="knob-ring-fill" cx="60" cy="60" r="52"/>
+                </svg>
+              </div>
+              <div class="ring-knob-readout">
+                <span class="ring-knob-number" id="mixValue">85</span>
+                <span class="ring-knob-suffix">%</span>
+              </div>
+              <div class="knob-3d-label">MIX</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
     </div>
+
+    <!-- ============ KEYBOARD SECTION ============ -->
+    <div class="keyboard-section">
+      <div class="keyboard-header">
+        <div class="section-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <line x1="6" y1="4" x2="6" y2="14"/>
+            <line x1="10" y1="4" x2="10" y2="14"/>
+            <line x1="14" y1="4" x2="14" y2="14"/>
+            <line x1="18" y1="4" x2="18" y2="14"/>
+          </svg>
+          <span>KEYBOARD</span>
+        </div>
+      </div>
+      <div class="piano-keyboard" id="noteGrid">
+        <div class="piano-key white active" data-note="C">
+          <span class="key-label">C</span>
+        </div>
+        <div class="piano-key black" data-note="C#">
+          <span class="key-label">C#</span>
+        </div>
+        <div class="piano-key white active" data-note="D">
+          <span class="key-label">D</span>
+        </div>
+        <div class="piano-key black" data-note="D#">
+          <span class="key-label">D#</span>
+        </div>
+        <div class="piano-key white active" data-note="E">
+          <span class="key-label">E</span>
+        </div>
+        <div class="piano-key white active" data-note="F">
+          <span class="key-label">F</span>
+        </div>
+        <div class="piano-key black" data-note="F#">
+          <span class="key-label">F#</span>
+        </div>
+        <div class="piano-key white active" data-note="G">
+          <span class="key-label">G</span>
+        </div>
+        <div class="piano-key black" data-note="G#">
+          <span class="key-label">G#</span>
+        </div>
+        <div class="piano-key white active" data-note="A">
+          <span class="key-label">A</span>
+        </div>
+        <div class="piano-key black" data-note="A#">
+          <span class="key-label">A#</span>
+        </div>
+        <div class="piano-key white active" data-note="B">
+          <span class="key-label">B</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ BOTTOM BAR ============ -->
+    <div class="bottom-bar">
+      <div class="bottom-left">
+        <button class="action-btn" id="startBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          Start
+        </button>
+        <button class="action-btn secondary" id="fileBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+          </svg>
+          Load
+        </button>
+        <input type="file" id="audioFileInput" accept="audio/*" style="display:none">
+      </div>
+      <div class="bottom-center">
+        <div class="preset-chips">
+          <button class="preset-chip" data-preset="natural">Natural</button>
+          <button class="preset-chip" data-preset="soft">Soft</button>
+          <button class="preset-chip active" data-preset="modern">Modern</button>
+          <button class="preset-chip" data-preset="hardtune">Hard</button>
+          <button class="preset-chip" data-preset="tpain">T-Pain</button>
+        </div>
+      </div>
+      <div class="bottom-right">
+        <div class="grille-texture"></div>
+        <span class="bottom-label">WAVR AUDIO</span>
+      </div>
+    </div>
+
+    <!-- Speaker Grille Texture Overlay -->
+    <div class="grille-overlay"></div>
 
   </div>
 
